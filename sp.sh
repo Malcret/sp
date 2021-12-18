@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
 
+# Updated in 2021 by Shillshocked
+# Added an updated url and uri function (the url one stopped working and the uri has just been implemented by me) sp search now works again thanks to Mustream (needs to also be installed, you may need to directly reference its location in your code). xclip has been replaced with xsel due to it not working for me
+# Added img2sixel support
+# Updated metadata function for odd cases not supported
 #
 # This is sp, the command-line Spotify controller. It talks to a running
 # instance of the Spotify Linux client over dbus, providing an interface not
@@ -98,7 +102,8 @@ function sp-metadata {
   org.freedesktop.DBus.Properties.Get                                         \
   string:"$SP_MEMB" string:'Metadata'                                         \
   | grep -Ev "^method"                           `# Ignore the first line.`   \
-  | grep -Eo '("(.*)")|(\b[0-9][a-zA-Z0-9.]*\b)' `# Filter interesting fiels.`\
+  | grep -v "^[[:space:]]*dict entry($" | grep -v "^[[:space:]]*)$" | grep -v "^[[:space:]]*variant[[:space:]]*array[[:space:]]*\[$" | grep -v "^[[:space:]]*]$" | sed 's|^[[:space:]]*variant||g' | sed 's|^[[:space:]]*||g' | sed 's|[^ ]* ||' `# Fix for odd cases added `\
+`# | grep -Eo '("(.*)")|(\b[0-9][a-zA-Z0-9.]*\b)'  Filter interesting fiels.`\
   | sed -E '2~2 a|'                              `# Mark odd fields.`         \
   | tr -d '\n'                                   `# Remove all newlines.`     \
   | sed -E 's/\|/\n/g'                           `# Restore newlines.`        \
@@ -110,7 +115,7 @@ function sp-metadata {
 }
 
 function sp-status {
-  # Prints the currently playing track in a parseable format.
+  # Prints if spotify currently play a track
 
   dbus-send                                                                   \
   --print-reply                                  `# We need the reply.`       \
@@ -119,9 +124,9 @@ function sp-status {
   org.freedesktop.DBus.Properties.Get                                         \
   string:"$SP_MEMB" string:'PlaybackStatus'                                   \
   | grep -Ev "^method"                           `# Ignore the first line.`   \
-  | sed 's/variant//'                           `# Remove useless line.`     \
-  | sed 's/string//'                            `# Remove useless line.`     \
-  | sed 's/"//g'                                  `# Remove quotes.`\
+  | sed 's/variant//'                            `# Remove useless line.`     \
+  | sed 's/string//'                             `# Remove useless line.`     \
+  | sed 's/"//g'                                 `# Remove quotes.`           \
   | sed 's/^[[:space:]]*//g'
 }
 
@@ -148,10 +153,19 @@ function sp-eval {
   | sed -E 's/^/SPOTIFY_/'
 }
 
-function sp-art {
+function sp-art-nw {
   # Prints the artUrl.
 
-  sp-metadata | grep "artUrl" | cut -d'|' -f2
+  sp-metadata | grep "^artUrl" | cut -d'|' -f2
+}
+
+function sp-art {
+  # Fixes artUrl to properly display.
+  original=$(sp-art-nw)
+  correct="https://i.scdn.co/image/"
+  incorrect="https://open.spotify.com/image/"
+  [ "${original%$incorrect*}" != "$original" ] && original="${original%$incorrect*}$correct${original#*$incorrect}"
+  echo $original
 }
 
 function sp-display {
@@ -168,18 +182,32 @@ function sp-feh {
   feh $(sp-art)
 }
 
+function sp-i {
+  # Calls img2sixel on the artURl.
+
+  require img2sixel
+  img2sixel $(sp-art)
+}
+
+function sp-uri {
+  # Prints the Spotify track uri.
+
+  TRACK=$(sp-metadata | grep "^url" | cut -d'|' -f2 | cut -d'/' -f5)
+  echo "spotify:track:$TRACK"
+}
+
 function sp-url {
   # Prints the HTTP url.
 
-  TRACK=$(sp-metadata | grep "url" | cut -d'|' -f2 | cut -d':' -f3)
-  echo "http://open.spotify.com/track/$TRACK"
+  TRACK=$(sp-metadata | grep "^url" | cut -d'|' -f2 | cut -d'/' -f5)
+  echo "https://open.spotify.com/track/$TRACK"
 }
 
 function sp-clip {
   # Copies the HTTP url.
 
-  require xclip
-  sp-url | xclip
+  require xsel
+  sp-url | xsel -b
 }
 
 function sp-http {
@@ -201,14 +229,16 @@ function sp-help {
   echo "  sp prev       - Go to previous track"
   echo ""
   echo "  sp current    - Format the currently playing track"
-  echo "  sp status     - Return the play status"
+  echo "  sp status     - Return if spotify currently play a track"
   echo "  sp metadata   - Dump the current track's metadata"
   echo "  sp eval       - Return the metadata as a shell script"
   echo ""
   echo "  sp art        - Print the URL to the current track's album artwork"
   echo "  sp display    - Display the current album artwork with \`display\`"
   echo "  sp feh        - Display the current album artwork with \`feh\`"
+  echo "  sp i          - Display the current album artwork with \`img2sixel\`"
   echo ""
+  echo "  sp uri        - Print the Spotify uri for the currently playing track"
   echo "  sp url        - Print the HTTP URL for the currently playing track"
   echo "  sp clip       - Copy the HTTP URL to the X clipboard"
   echo "  sp http       - Open the HTTP URL in a web browser"
@@ -225,15 +255,10 @@ function sp-help {
 function sp-search {
   # Searches for tracks, plays the first result.
 
-  require curl
+#  require Mustream
 
-  Q="$@"
-  SPTFY_URI=$( \
-    curl -s -G --data-urlencode "q=$Q" https://api.spotify.com/v1/search\?type=track \
-    | grep -E -o "spotify:track:[a-zA-Z0-9]+" -m 1 \
-  )
+  /home/destiny/Scripts/Mustream-master/play "$@"
 
-  sp-open $SPTFY_URI
 }
 
 function sp-version {

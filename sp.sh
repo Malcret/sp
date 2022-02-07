@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# Updated in 2022 by Malcret
+# Updated in 2021 by Malcret
 # Added a funtion to print current playing status
 # Updated in 2021 by Shillshocked
 # Added an updated url and uri function (the url one stopped working and the uri has just been implemented by me) sp search now works again thanks to Mustream (needs to also be installed, you may need to directly reference its location in your code). xclip has been replaced with xsel due to it not working for me
